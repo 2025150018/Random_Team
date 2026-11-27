@@ -153,10 +153,7 @@
 
   function setAnnounce(html) {
     const a = $('announce');
-    a.innerHTML = html;
-    a.classList.remove('bump');
-    void a.offsetWidth;
-    a.classList.add('bump');
+    a.innerHTML = html ? `<span class="inner bump">${html}</span>` : '';
   }
 
   // ---------- 연출 ----------
@@ -361,8 +358,8 @@
   function confetti() {
     const cv = $('confetti');
     const ctx = cv.getContext('2d');
-    cv.width = innerWidth;
-    cv.height = innerHeight;
+    cv.width = cv.clientWidth;
+    cv.height = cv.clientHeight;
     const parts = Array.from({ length: 180 }, () => ({
       x: Math.random() * cv.width,
       y: -20 - Math.random() * cv.height * 0.5,
