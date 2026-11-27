@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>랜덤 팀 배정</title>
+<style>
+  :root {
+    --bg: #0f1226;
+    --panel: #1a1f3d;
+    --panel-2: #232a52;
+    --text: #eef0ff;
+    --muted: #9aa1d0;
+    --accent: #ffcc33;
+    --danger: #ff6b6b;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 20% 0%, #232a5c 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  }
+  header { text-align: center; padding: 28px 16px 8px; }
+  header h1 { margin: 0; font-size: clamp(26px, 4vw, 40px); letter-spacing: -0.5px; }
+  header p { margin: 6px 0 0; color: var(--muted); }
+
+  .controls {
+    max-width: 1100px; margin: 18px auto; padding: 18px;
+    background: var(--panel); border-radius: var(--radius);
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    align-items: end;
+  }
+  .controls label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+  .controls input, .controls select, .controls textarea {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid #343c72; border-radius: 10px;
+    padding: 10px 12px; font-size: 16px; font-family: inherit;
+  }
+  .controls textarea { resize: vertical; min-height: 44px; }
+  .controls .names { grid-column: 1 / -1; }
+  .buttons { display: flex; gap: 10px; grid-column: 1 / -1; flex-wrap: wrap; }
+  button {
+    border: 0; border-radius: 10px; padding: 12px 20px;
+    font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit;
+    transition: transform .1s, filter .2s;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.1); }
+  button:active:not(:disabled) { transform: scale(.97); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  #startBtn { background: var(--accent); color: #2a2100; flex: 1 1 200px; font-size: 18px; }
+  #skipBtn, #copyBtn, #resetBtn { background: var(--panel-2); color: var(--text); }
+  .error { color: var(--danger); grid-column: 1 / -1; min-height: 1em; margin: 0; font-size: 14px; }
+
+  .announce {
+    text-align: center; min-height: 64px; margin: 4px 16px;
+    font-size: clamp(22px, 3.4vw, 34px); font-weight: 800;
+  }
+  .announce .arrow { color: var(--muted); margin: 0 10px; }
+  .announce.bump { animation: bump .35s ease-out; }
+  @keyframes bump { 0% { transform: scale(.7); opacity: 0; } 70% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+
+  main { max-width: 1100px; margin: 0 auto 40px; padding: 0 16px; }
+  .section-title { color: var(--muted); font-size: 14px; margin: 18px 0 8px; }
+
+  .pool {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+    padding: 16px; background: var(--panel); border-radius: var(--radius); min-height: 70px;
+  }
+  .chip {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 46px; height: 38px; padding: 0 12px;
+    background: var(--panel-2); color: var(--text);
+    border-radius: 999px; font-weight: 700; font-size: 15px; white-space: nowrap;
+    transition: background .15s, opacity .3s, transform .15s, box-shadow .15s;
+  }
+  .pool .chip.flash { background: var(--accent); color: #2a2100; transform: scale(1.18); box-shadow: 0 0 18px var(--accent); }
+  .pool .chip.taken { opacity: .12; }
+  .chip.ghost { position: fixed; z-index: 50; margin: 0; pointer-events: none; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+  .chip.pop { animation: pop .4s ease-out; }
+  @keyframes pop { 0% { transform: scale(1.5); } 100% { transform: scale(1); } }
+
+  .teams {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+  .team {
+    background: var(--panel); border-radius: var(--radius);
+    border: 3px solid transparent; padding: 12px; min-height: 120px;
+    transition: border-color .12s, transform .12s, box-shadow .12s;
+  }
+  .team.flash { border-color: var(--team-color); transform: translateY(-4px); box-shadow: 0 0 24px var(--team-color); }
+  .team h3 {
+    margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center;
+    color: var(--team-color); font-size: 20px;
+  }
+  .team h3 .count { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .team .members { display: flex; flex-wrap: wrap; gap: 6px; }
+  .team .members .chip { color: #111; }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(8, 10, 25, .75);
+    font-size: min(40vw, 260px); font-weight: 900; color: var(--accent);
+  }
+  .overlay.show { display: flex; }
+  .overlay span { animation: count .8s ease-out; }
+  @keyframes count { 0% { transform: scale(2.2); opacity: 0; } 40% { opacity: 1; } 100% { transform: scale(.8); opacity: .2; } }
+
+  #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 90; }
+
+  #dice { cursor: default; user-select: none; }
+  .preset {
+    position: fixed; inset: 0; z-index: 200; display: none;
+    align-items: center; justify-content: center; padding: 16px;
+    background: rgba(8, 10, 25, .85);
+  }
+  .preset.show { display: flex; }
+  .preset .box {
+    width: min(560px, 100%); background: var(--panel); border-radius: var(--radius);
+    padding: 20px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .preset h2 { margin: 0; font-size: 20px; }
+  .preset .help { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .preset .help code { background: var(--panel-2); padding: 1px 6px; border-radius: 6px; color: var(--text); }
+  .preset textarea {
+    min-height: 160px; resize: vertical; font-size: 16px; font-family: inherit;
+    background: var(--panel-2); color: var(--text); border: 1px solid #343c72; border-radius: 10px; padding: 10px 12px;
+  }
+  .preset .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .preset .row button { background: var(--panel-2); color: var(--text); }
+  .preset .row .primary { background: var(--accent); color: #2a2100; }
+  .preset .status { margin: 0; font-size: 14px; min-height: 1.2em; white-space: pre-line; }
+  .preset .status.ok { color: #7be08a; }
+  .preset .status.bad { color: var(--danger); }
+
+  @media (max-width: 520px) {
+    .teams { grid-template-columns: 1fr 1fr; }
+    .chip { min-width: 40px; height: 34px; font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1><span id="dice">🎲</span> 랜덤 팀 배정</h1>
+    <p>인원수와 팀 수를 입력하고 시작을 누르세요</p>
+  </header>
+
+  <section class="controls">
+    <label>인원수
+      <input id="people" type="number" min="2" max="300" value="24">
+    </label>
+    <label>팀 수
+      <input id="teams" type="number" min="2" max="30" value="4">
+    </label>
+    <label>연출 속도
+      <select id="speed">
+        <option value="1.8">느리게 (긴장감 ↑)</option>
+        <option value="1" selected>보통</option>
+        <option value="0.45">빠르게</option>
+        <option value="0.15">순식간에</option>
+      </select>
+    </label>
+    <label class="names">이름 (선택, 한 줄에 한 명 — 입력하면 인원수 대신 사용)
+      <textarea id="names" rows="2" placeholder="비워두면 1번, 2번, 3번 … 으로 표시됩니다"></textarea>
+    </label>
+    <div class="buttons">
+      <button id="startBtn">배정 시작</button>
+      <button id="skipBtn" disabled>결과 바로 보기</button>
+      <button id="copyBtn" disabled>결과 복사</button>
+      <button id="resetBtn">초기화</button>
+    </div>
+    <p class="error" id="error"></p>
+  </section>
+
+  <div class="announce" id="announce"></div>
+
+  <main>
+    <div class="section-title" id="poolTitle"></div>
+    <div class="pool" id="pool"></div>
+    <div class="section-title">팀</div>
+    <div class="teams" id="teamsBox"></div>
+  </main>
+
+  <div class="overlay" id="overlay"></div>
+  <canvas id="confetti"></canvas>
+
+  <!-- 숨김 설정: 🎲를 빠르게 세 번 클릭하거나 Alt+Shift+S -->
+  <div class="preset" id="preset">
+    <div class="box">
+      <h2>미리 정한 배정</h2>
+      <p class="help">
+        한 줄에 한 팀씩, 그 팀에 넣을 사람을 쉼표나 띄어쓰기로 구분해 적으세요.<br>
+        예) <code>1팀: 3, 7, 12</code> &nbsp;또는 줄 순서대로 <code>3 7 12</code><br>
+        이름으로 적어도 되고, 아직 명단에 없는 이름도 미리 적어둘 수 있습니다 (명단에 생기면 적용). 비운 줄은 그 팀에 고정 인원이 없다는 뜻입니다.<br>
+        적지 않은 사람은 남은 자리에 무작위로, 팀 인원이 고르게 되도록 들어갑니다.
+      </p>
+      <textarea id="presetText" placeholder="1팀: 3, 7&#10;2팀: 5&#10;3팀:&#10;4팀: 1, 2"></textarea>
+      <p class="status" id="presetStatus"></p>
+      <div class="row">
+        <button class="primary" id="presetSave">저장</button>
+        <button id="presetClear">지우기 (완전 무작위)</button>
+        <button id="presetClose">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
